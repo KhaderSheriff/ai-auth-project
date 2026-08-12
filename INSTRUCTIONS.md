@@ -120,11 +120,21 @@ Keep code organized into these folders; do not split frontend and backend into s
 
 ## Authentication Details
 
-- Use HTTP-only, `Secure` (in production), `SameSite=Lax` or `Strict` cookies for storing a session identifier.
-- Keep session logic simple: a signed cookie containing a server-side session id or a short-lived token.
-- Keep server-side verification in middleware or server-centric checks so protected pages are validated on the server.
-
-Note: JWTs may be used but must be stored and validated safely; prefer simple HTTP-only cookie sessions for this student project.
+- Use JWT (JSON Web Token) for authentication.
+- After successful login, generate a JWT containing the authenticated user's identifier.
+- Store the JWT in a secure HTTP-only cookie so it cannot be accessed by client-side JavaScript.
+- Use a secret stored in `JWT_SECRET` inside `.env.local` to sign and verify JWTs.
+- Verify the JWT on protected server-side pages/routes before allowing access.
+- Do not expose the JWT through client-side JavaScript.
+- Do not store JWTs in localStorage or sessionStorage.
+- Set appropriate cookie attributes:
+  - `httpOnly: true`
+  - `secure: true` in production
+  - `sameSite: "lax"` or `"strict"`
+  - appropriate expiration/max-age
+- Passwords must always be hashed using bcrypt before being stored in MongoDB.
+- Never store or return plain-text passwords.
+- JWT authentication and password hashing must be implemented only on the server.
 
 ---
 
