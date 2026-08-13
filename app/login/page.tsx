@@ -20,6 +20,9 @@ export default function LoginPage() {
   });
 
   const [errors, setErrors] = useState<FormErrors>(emptyErrors);
+  const [serverError, setServerError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -41,6 +44,8 @@ export default function LoginPage() {
     }
 
     setErrors(nextErrors);
+    setServerError("");
+    setSuccessMessage("");
     return isValid;
   };
 
@@ -58,13 +63,82 @@ export default function LoginPage() {
         [name]: "",
       }));
     }
+
+    if (serverError) {
+      setServerError("");
+    }
+
+    if (successMessage) {
+      setSuccessMessage("");
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (!validateForm()) {
       return;
+    }
+
+    setIsLoading(true);
+    setServerError("");
+    setSuccessMessage("");
+
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: formData.email.trim(),
+          password: formData.password,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          setErrors((prev) => ({
+            ...prev,
+            email: "Invalid email or password",
+            password: "Invalid email or password",
+          }));
+          setServerError("Invalid email or password");
+          return;
+        }
+
+        const backendErrors = data?.details as
+          | Record<string, string[] | undefined>
+          | undefined;
+
+        if (backendErrors && typeof backendErrors === "object") {
+          const nextErrors: FormErrors = { ...emptyErrors };
+
+          (Object.keys(backendErrors) as Array<keyof FormErrors>).forEach((field) => {
+            const fieldErrors = backendErrors[field];
+            if (fieldErrors && fieldErrors.length > 0) {
+              nextErrors[field] = fieldErrors[0];
+            }
+          });
+
+          setErrors(nextErrors);
+          setServerError("Please correct the highlighted fields and try again.");
+          return;
+        }
+
+        setServerError(data?.error || "Something went wrong. Please try again.");
+        return;
+      }
+
+      setFormData({ email: "", password: "" });
+      setErrors(emptyErrors);
+      setSuccessMessage("Login successful!");
+    } catch {
+      setServerError("Something went wrong. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -75,6 +149,18 @@ export default function LoginPage() {
         <p className="text-gray-600 mb-6 text-sm">
           Welcome back! Please sign in to continue.
         </p>
+
+        {serverError && (
+          <div className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {serverError}
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="mb-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+            {successMessage}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -129,9 +215,10 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+            disabled={isLoading}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
           >
-            Login
+            {isLoading ? "Logging in..." : "Login"}
           </button>
         </form>
 
