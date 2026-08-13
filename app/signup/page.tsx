@@ -3,6 +3,18 @@
 import { useState } from "react";
 import Link from "next/link";
 
+type FormErrors = {
+  name: string;
+  email: string;
+  password: string;
+};
+
+const emptyErrors: FormErrors = {
+  name: "",
+  email: "",
+  password: "",
+};
+
 export default function SignupPage() {
   const [formData, setFormData] = useState({
     name: "",
@@ -10,26 +22,22 @@ export default function SignupPage() {
     password: "",
   });
 
-  const [errors, setErrors] = useState({
-    name: "",
-    email: "",
-    password: "",
-  });
+  const [errors, setErrors] = useState<FormErrors>(emptyErrors);
+  const [serverError, setServerError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Simple email validation regex
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   const validateForm = () => {
-    const newErrors = { name: "", email: "", password: "" };
+    const newErrors: FormErrors = { ...emptyErrors };
     let isValid = true;
 
-    // Validate name
     if (!formData.name.trim()) {
       newErrors.name = "Name is required";
       isValid = false;
     }
 
-    // Validate email
     if (!formData.email.trim()) {
       newErrors.email = "Email is required";
       isValid = false;
@@ -38,7 +46,6 @@ export default function SignupPage() {
       isValid = false;
     }
 
-    // Validate password
     if (!formData.password) {
       newErrors.password = "Password is required";
       isValid = false;
@@ -48,29 +55,99 @@ export default function SignupPage() {
     }
 
     setErrors(newErrors);
+    setServerError("");
+    setSuccessMessage("");
     return isValid;
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+
     setFormData((prev) => ({
       ...prev,
       [name]: value,
     }));
-    // Clear error for this field when user starts typing
-    if (errors[name as keyof typeof errors]) {
+
+    if (errors[name as keyof FormErrors]) {
       setErrors((prev) => ({
         ...prev,
         [name]: "",
       }));
     }
+
+    if (serverError) {
+      setServerError("");
+    }
+
+    if (successMessage) {
+      setSuccessMessage("");
+    }
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (validateForm()) {
-      // TODO: Submit to API endpoint /api/auth/signup
-      console.log("Form is valid, ready to submit:", formData);
+
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsLoading(true);
+    setServerError("");
+    setSuccessMessage("");
+
+    try {
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          password: formData.password,
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const backendErrors = data?.details as Record<string, string[] | undefined> | undefined;
+
+        if (data?.error === "Email is already registered") {
+          setErrors((prev) => ({
+            ...prev,
+            email: "This email is already registered. Please use another email or log in.",
+          }));
+          setServerError("An account with this email already exists.");
+          return;
+        }
+
+        if (backendErrors && typeof backendErrors === "object") {
+          const nextErrors: FormErrors = { ...emptyErrors };
+
+          (Object.keys(backendErrors) as Array<keyof FormErrors>).forEach((field) => {
+            const fieldErrors = backendErrors[field];
+            if (fieldErrors && fieldErrors.length > 0) {
+              nextErrors[field] = fieldErrors[0];
+            }
+          });
+
+          setErrors(nextErrors);
+          setServerError("Please correct the highlighted fields and try again.");
+          return;
+        }
+
+        setServerError(data?.error || "Something went wrong. Please try again.");
+        return;
+      }
+
+      setFormData({ name: "", email: "", password: "" });
+      setErrors(emptyErrors);
+      setSuccessMessage("Registration successful! You can now log in.");
+    } catch {
+      setServerError("Something went wrong. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -82,8 +159,19 @@ export default function SignupPage() {
           Create a new account to get started
         </p>
 
+        {serverError && (
+          <div className="mb-4 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {serverError}
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="mb-4 rounded border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+            {successMessage}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Name Field */}
           <div>
             <label
               htmlFor="name"
@@ -109,7 +197,6 @@ export default function SignupPage() {
             )}
           </div>
 
-          {/* Email Field */}
           <div>
             <label
               htmlFor="email"
@@ -135,7 +222,6 @@ export default function SignupPage() {
             )}
           </div>
 
-          {/* Password Field */}
           <div>
             <label
               htmlFor="password"
@@ -161,16 +247,15 @@ export default function SignupPage() {
             )}
           </div>
 
-          {/* Sign Up Button */}
           <button
             type="submit"
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
+            disabled={isLoading}
+            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition duration-200"
           >
-            Sign Up
+            {isLoading ? "Creating account..." : "Sign Up"}
           </button>
         </form>
 
-        {/* Link to Login Page */}
         <p className="text-center text-gray-600 text-sm mt-6">
           Already have an account?{" "}
           <Link
